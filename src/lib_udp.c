@@ -27,6 +27,8 @@ udp_server(u_long prog, int rdwr)
 	sock_optimize(sock, rdwr);
 	bzero((void*)&s, sizeof(s));
 	s.sin_family = AF_INET;
+	// Change to 127.0.0.1 instead of 0.0.0.0
+	s.sin_addr.s_addr = 0x0100007f;
 #ifdef	NO_PORTMAPPER
 	s.sin_port = htons(prog);
 #endif

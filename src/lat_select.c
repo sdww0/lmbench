@@ -147,7 +147,7 @@ server(void* cookie)
 int
 open_socket(void* cookie)
 {
-	return tcp_connect("localhost", TCP_SELECT, SOCKOPT_NONE);
+	return tcp_connect("127.0.0.1", TCP_SELECT, SOCKOPT_NONE);
 }
 
 int

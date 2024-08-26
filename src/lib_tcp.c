@@ -29,6 +29,9 @@ tcp_server(int prog, int rdwr)
 	}
 	sock_optimize(sock, rdwr);
 	bzero((void*)&s, sizeof(s));
+
+	// Change to 127.0.0.1 instead of 0.0.0.0
+	s.sin_addr.s_addr = 0x0100007f;
 	s.sin_family = AF_INET;
 	if (prog < 0) {
 		s.sin_port = htons(-prog);
