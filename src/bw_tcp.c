@@ -242,10 +242,23 @@ source(int data)
 	/*
 	 * Keep sending messages until the connection is closed
 	 */
-	while (write(data, buf, m) == m) {
-#ifdef	TOUCH
-		touch(buf, m);
+	writer(data, buf, m);
+}
+
+void
+writer(int writefd, char* buf, size_t xfer)
+{
+	size_t	done;
+	ssize_t	n;
+
+	for ( ;; ) {
+#ifdef TOUCH
+		touch(buf, xfer);
 #endif
+		for (done = 0; done < xfer; done += n) {
+			if ((n = write(writefd, buf, xfer - done)) < 0) {
+				exit(0);
+			}
+		}
 	}
-	free(buf);
 }
