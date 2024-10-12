@@ -97,7 +97,7 @@ server_main()
 	char	c ='1';
 
 	GO_AWAY;
-	sock = tcp_server(TCP_CONNECT, SOCKOPT_NONE|SOCKOPT_REUSE);
+	sock = tcp_server("127.0.0.1", TCP_CONNECT, SOCKOPT_NONE|SOCKOPT_REUSE);
 	for (;;) {
 		newsock = tcp_accept(sock, SOCKOPT_NONE);
 		if (read(newsock, &c, 1) > 0) {

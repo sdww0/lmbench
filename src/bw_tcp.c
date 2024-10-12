@@ -181,7 +181,7 @@ server_main()
 
 	GO_AWAY;
 
-	data = tcp_server(TCP_DATA, SOCKOPT_WRITE|SOCKOPT_REUSE);
+	data = tcp_server("127.0.0.1", TCP_DATA, SOCKOPT_WRITE|SOCKOPT_REUSE);
 	if (data < 0) {
 		perror("server socket creation");
 		exit(1);

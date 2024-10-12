@@ -80,7 +80,7 @@ main(int ac, char **av)
 	 * Steve - why is this here?
 	 */
 	signal(SIGPIPE, SIG_IGN);
-	data = tcp_server(prog, SOCKOPT_REUSE);
+	data = tcp_server("127.0.0.1", prog, SOCKOPT_REUSE);
 	bufs[0] = valloc(XFERSIZE);
 	bufs[1] = valloc(XFERSIZE);
 	bufs[2] = valloc(XFERSIZE);

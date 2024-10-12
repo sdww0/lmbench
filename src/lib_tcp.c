@@ -15,13 +15,13 @@
  * XXX - it would be nice if you could advertise ascii strings.
  */
 int
-tcp_server(int prog, int rdwr)
+tcp_server(char* addr, int prog, int rdwr)
 {
 	int	sock;
 	struct	sockaddr_in s;
 
 #ifdef	LIBTCP_VERBOSE
-	fprintf(stderr, "tcp_server(%u, %u)\n", prog, rdwr);
+	fprintf(stderr, "tcp_server(%s, %u, %u)\n", addr, prog, rdwr);
 #endif
 	if ((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
 		perror("socket");
@@ -30,8 +30,10 @@ tcp_server(int prog, int rdwr)
 	sock_optimize(sock, rdwr);
 	bzero((void*)&s, sizeof(s));
 
-	// Change to 127.0.0.1 instead of 0.0.0.0
-	s.sin_addr.s_addr = 0x0100007f;
+	if (inet_aton(addr, &s.sin_addr) < 0) {
+		fprintf(stderr, "inet_aton cannot parse %s", addr);
+		exit(1);
+	}
 	s.sin_family = AF_INET;
 	if (prog < 0) {
 		s.sin_port = htons(-prog);

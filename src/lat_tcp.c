@@ -38,15 +38,15 @@ main(int ac, char **av)
 	int	repetitions = TRIES;
 	int 	c;
 	char	buf[256];
-	char	*usage = "-s\n OR [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n OR -S server\n";
+	char	*usage = "-s server\n OR [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n OR -S server\n";
 
 	state.msize = 1;
 
-	while (( c = getopt(ac, av, "sS:m:P:W:N:")) != EOF) {
+	while (( c = getopt(ac, av, "s:S:m:P:W:N:")) != EOF) {
 		switch(c) {
 		case 's': /* Server */
 			if (fork() == 0) {
-				server_main();
+				server_main(optarg);
 			}
 			exit(0);
 		case 'S': /* shutdown serverhost */
@@ -98,6 +98,10 @@ init(iter_t iterations, void* cookie)
 	if (iterations) return;
 
 	state->sock = tcp_connect(state->server, TCP_XACT, SOCKOPT_NONE);
+	if (state -> sock < 0) {
+		fprintf(stderr, "fail to connect to server: %s\n", state -> server);
+		exit(1);
+	}
 	state->buf = malloc(state->msize);
 
 	write(state->sock, &msize, sizeof(int));
@@ -121,19 +125,25 @@ doclient(iter_t iterations, void* cookie)
 	int 	sock   = state->sock;
 
 	while (iterations-- > 0) {
-		write(sock, state->buf, state->msize);
-		read(sock, state->buf, state->msize);
+		if (write(sock, state->buf, state->msize) < 0) {
+			fprintf(stderr, "write %d bytes fails", state->msize);
+			exit(1);
+		}
+		if (read(sock, state->buf, state->msize) < 0) {
+			fprintf(stderr, "read %d bytes fails", state->msize);
+			exit(2);
+		}
 	}
 }
 
 void
-server_main()
+server_main(char* addr)
 {
 	int     newsock, sock;
 
 	GO_AWAY;
 	signal(SIGCHLD, sigchld_wait_handler);
-	sock = tcp_server(TCP_XACT, SOCKOPT_REUSE);
+	sock = tcp_server(addr, TCP_XACT, SOCKOPT_REUSE);
 	for (;;) {
 		newsock = tcp_accept(sock, SOCKOPT_NONE);
 		switch (fork()) {
