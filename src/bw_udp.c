@@ -2,7 +2,7 @@
  * bw_udp.c - simple UDP bandwidth test
  *
  * Three programs in one -
- *	server usage:	bw_tcp -s
+ *	server usage:	bw_tcp -s hostname
  *	client usage:	bw_tcp [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] hostname [bytes]
  *	shutdown:	bw_tcp -S hostname
  *
@@ -28,7 +28,7 @@ typedef struct _state {
 	char	*buf;
 } state_t;
 
-void	server_main();
+void	server_main(char* addr);
 void	client_main(int parallel, state_t *state);
 void	init(iter_t iterations, void *cookie);
 void	cleanup(iter_t iterations, void *cookie);
@@ -43,7 +43,7 @@ main(int ac, char **av)
 	int	repetitions = TRIES;
 	int	server = 0;
 	state_t state;
-	char	*usage = "-s\n OR [-m <message size>] [-W <warmup>] [-N <repetitions>] server [size]\n OR -S serverhost\n";
+	char	*usage = "-s serverhost\n OR [-m <message size>] [-W <warmup>] [-N <repetitions>] server [size]\n OR -S serverhost\n";
 	int	c;
 	uint64	usecs;
 	
@@ -51,11 +51,11 @@ main(int ac, char **av)
 	state.move = 10*1024*1024;
 
 	/* Rest is client argument processing */
-	while (( c = getopt(ac, av, "sS:m:W:N:")) != EOF) {
+	while (( c = getopt(ac, av, "s:S:m:W:N:")) != EOF) {
 		switch(c) {
 		case 's': /* Server */
 			if (fork() == 0) {
-				server_main();
+				server_main(optarg);
 			}
 			exit(0);
 		case 'S': /* shutdown serverhost */
@@ -170,7 +170,7 @@ cleanup(iter_t iterations, void* cookie)
 }
 
 void
-server_main()
+server_main(char* addr)
 {
 	char	*buf = (char*)valloc(MAX_MSIZE);
 	int     sock, namelen, seq = 0;
@@ -179,7 +179,7 @@ server_main()
 
 	GO_AWAY;
 
-	sock = udp_server(UDP_XACT, SOCKOPT_NONE);
+	sock = udp_server(addr, UDP_XACT, SOCKOPT_NONE);
 
 	while (1) {
 		namelen = sizeof(it);

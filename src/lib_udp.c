@@ -15,7 +15,7 @@
  * XXX - it would be nice if you could advertise ascii strings.
  */
 int
-udp_server(u_long prog, int rdwr)
+udp_server(char* addr, u_long prog, int rdwr)
 {
 	int	sock;
 	struct	sockaddr_in s;
@@ -27,8 +27,10 @@ udp_server(u_long prog, int rdwr)
 	sock_optimize(sock, rdwr);
 	bzero((void*)&s, sizeof(s));
 	s.sin_family = AF_INET;
-	// Change to 127.0.0.1 instead of 0.0.0.0
-	s.sin_addr.s_addr = 0x0100007f;
+	if (inet_aton(addr, &s.sin_addr) < 0) {
+		fprintf(stderr, "inet_aton cannot parse %s", addr);
+		exit(1);
+	}
 #ifdef	NO_PORTMAPPER
 	s.sin_port = htons(prog);
 #endif

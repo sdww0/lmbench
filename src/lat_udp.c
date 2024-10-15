@@ -2,7 +2,7 @@
  * udp_xact.c - simple UDP transaction latency test
  *
  * Three programs in one -
- *	server usage:	lat_udp -s
+ *	server usage:	lat_udp -s hostname
  *	client usage:	lat_udp [-P <parallelism>] [-W <warmup>] [-N <repetitions>] hostname
  *	shutdown:	lat_udp -S hostname
  *
@@ -18,7 +18,7 @@ char	*id = "$Id$\n";
 #define MAX_MSIZE (10 * 1024 * 1024)
 
 void	client_main(int ac, char **av);
-void	server_main();
+void	server_main(char* addr);
 void	timeout();
 void	init(iter_t iterations, void* cookie);
 void	cleanup(iter_t iterations, void* cookie);
@@ -45,18 +45,18 @@ main(int ac, char **av)
 	int	shutdown = 0;
 	int	msize = 4;
  	char	buf[256];
-	char	*usage = "-s\n OR [-S] [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n NOTE: message size must be >= 4\n";
+	char	*usage = "-s serverhost\n OR [-S] [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n NOTE: message size must be >= 4\n";
 
 	if (sizeof(int) != 4) {
 		fprintf(stderr, "lat_udp: Wrong sequence size\n");
 		return(1);
 	}
 
-	while (( c = getopt(ac, av, "sS:m:P:W:N:")) != EOF) {
+	while (( c = getopt(ac, av, "s:S:m:P:W:N:")) != EOF) {
 		switch(c) {
 		case 's': /* Server */
 			if (fork() == 0) {
-				server_main();
+				server_main(optarg);
 			}
 			exit(0);
 		case 'S': /* shutdown serverhost */
@@ -171,7 +171,7 @@ timeout()
 }
 
 void
-server_main()
+server_main(char* addr)
 {
 	char	*buf = (char*)valloc(MAX_MSIZE);
 	int     sock, sent, namelen, seq = 0;
@@ -179,7 +179,7 @@ server_main()
 
 	GO_AWAY;
 
-	sock = udp_server(UDP_XACT, SOCKOPT_REUSE);
+	sock = udp_server(addr, UDP_XACT, SOCKOPT_REUSE);
 
 	while (1) {
 		int nbytes;
