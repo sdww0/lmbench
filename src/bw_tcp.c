@@ -2,7 +2,7 @@
  * bw_tcp.c - simple TCP bandwidth test
  *
  * Three programs in one -
- *	server usage:	bw_tcp -s
+ *	server usage:	bw_tcp -s hostname [-b <backlog>]
  *	client usage:	bw_tcp [-m <message size>] [-M <total bytes>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] hostname 
  *	shutdown:	bw_tcp -hostname
  *
@@ -25,7 +25,7 @@ typedef struct _state {
 	char	*buf;
 } state_t;
 
-void	server_main();
+void	server_main(char* addr, int backlog);
 void	client_main(int parallel, state_t *state);
 void	source(int data);
 
@@ -39,22 +39,36 @@ main(int ac, char **av)
 	int	parallel = 1;
 	int	warmup = LONGER;
 	int	repetitions = TRIES;
+	int server_mode = 0;
+	char serverhost[256];
+	int backlog = 100;
 	int	shutdown = 0;
 	state_t state;
-	char	*usage = "-s\n OR [-m <message size>] [-M <bytes to move>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n OR -S serverhost\n";
+	char	*usage = "-s serverhost [-b <backlog>]\n OR [-m <message size>] [-M <bytes to move>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n OR -S serverhost\n";
 	int	c;
 	
 	state.msize = 0;
 	state.move = 0;
 
 	/* Rest is client argument processing */
-	while (( c = getopt(ac, av, "sS:m:M:P:W:N:")) != EOF) {
+	while (( c = getopt(ac, av, "s:b:S:m:M:P:W:N:")) != EOF) {
 		switch(c) {
 		case 's': /* Server */
-			if (fork() == 0) {
-				server_main();
+			if (strlen(optarg) > 256) {
+				fprintf(stderr, "serverhost %s cannot have length greater than 256\n", optarg);
+				exit(1);
 			}
-			exit(0);
+			strcpy(serverhost, optarg);
+			fprintf(stderr, "serverhost: %s\n", serverhost);
+			server_mode = 1;
+			break;
+		case 'b': /* Set backlog */
+			backlog = atoi(optarg);
+			fprintf(stderr, "backlog: %d\n", backlog);
+			if (backlog < 1) {
+				fprintf(stderr, "backlog cannot be %d and must greater than or equal to 1\n", backlog);
+				exit(1);
+			} 
 			break;
 		case 'S': /* shutdown serverhost */
 		{
@@ -83,6 +97,13 @@ main(int ac, char **av)
 			lmbench_usage(ac, av, usage);
 			break;
 		}
+	}
+
+	if (server_mode) {
+		if (fork() == 0) {
+			server_main(serverhost, backlog);
+		}
+		exit(0);
 	}
 
 	if (optind < ac - 2 || optind >= ac) {
@@ -175,13 +196,13 @@ cleanup(iter_t iterations, void* cookie)
 }
 
 void
-server_main()
+server_main(char* addr, int backlog)
 {
 	int	data, newdata;
 
 	GO_AWAY;
 
-	data = tcp_server("127.0.0.1", TCP_DATA, SOCKOPT_WRITE|SOCKOPT_REUSE);
+	data = tcp_server(addr, backlog, TCP_DATA, SOCKOPT_WRITE|SOCKOPT_REUSE);
 	if (data < 0) {
 		perror("server socket creation");
 		exit(1);

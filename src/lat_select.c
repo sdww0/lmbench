@@ -119,7 +119,7 @@ server(void* cookie)
 	}
 
 	/* Create a socket for clients to connect to */
-	state->sock = tcp_server("127.0.0.1", TCP_SELECT, SOCKOPT_REUSE);
+	state->sock = tcp_server("127.0.0.1", 100, TCP_SELECT, SOCKOPT_REUSE);
 	if (state->sock <= 0) {
 		perror("lat_select: Could not open tcp server socket");
 		exit(1);

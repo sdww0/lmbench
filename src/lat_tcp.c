@@ -2,7 +2,7 @@
  * lat_tcp.c - simple TCP transaction latency test
  *
  * Three programs in one -
- *	server usage:	tcp_xact -s
+ *	server usage:	tcp_xact -s hostname [-b <backlog>]
  *	client usage:	tcp_xact [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] hostname
  *	shutdown:	tcp_xact -S hostname
  *
@@ -26,7 +26,7 @@ typedef struct _state {
 void	init(iter_t iterations, void* cookie);
 void	cleanup(iter_t iterations, void* cookie);
 void	doclient(iter_t iterations, void* cookie);
-void	server_main();
+void	server_main(char* addr, int backlog);
 void	doserver(int sock);
 
 int
@@ -36,19 +36,34 @@ main(int ac, char **av)
 	int	parallel = 1;
 	int	warmup = 0;
 	int	repetitions = TRIES;
+	int server_mode = 0;
+	char serverhost[256];
+	int backlog = 100;
 	int 	c;
 	char	buf[256];
-	char	*usage = "-s server\n OR [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n OR -S server\n";
+	char	*usage = "-s serverhost [-b <backlog>]\n OR [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n OR -S server\n";
 
 	state.msize = 1;
 
-	while (( c = getopt(ac, av, "s:S:m:P:W:N:")) != EOF) {
+	while (( c = getopt(ac, av, "s:b:S:m:P:W:N:")) != EOF) {
 		switch(c) {
 		case 's': /* Server */
-			if (fork() == 0) {
-				server_main(optarg);
+			if (strlen(optarg) > 256) {
+				fprintf(stderr, "serverhost %s cannot have length greater than 256\n", optarg);
+				exit(1);
 			}
-			exit(0);
+			strcpy(serverhost, optarg);
+			fprintf(stderr, "serverhost: %s\n", serverhost);
+			server_mode = 1;
+			break;
+		case 'b': /* Set backlog */
+			backlog = atoi(optarg);
+			fprintf(stderr, "backlog: %d\n", backlog);
+			if (backlog < 1) {
+				fprintf(stderr, "backlog cannot be %d and must greater than or equal to 1\n", backlog);
+				exit(1);
+			} 
+			break;
 		case 'S': /* shutdown serverhost */
 			state.sock = tcp_connect(optarg,
 						 TCP_XACT,
@@ -73,6 +88,13 @@ main(int ac, char **av)
 			lmbench_usage(ac, av, usage);
 			break;
 		}
+	}
+
+	if (server_mode) {
+		if (fork() == 0) {
+			server_main(serverhost, backlog);
+		}
+		exit(0);
 	}
 
 	if (optind != ac - 1) {
@@ -137,13 +159,13 @@ doclient(iter_t iterations, void* cookie)
 }
 
 void
-server_main(char* addr)
+server_main(char* addr, int backlog)
 {
 	int     newsock, sock;
 
 	GO_AWAY;
 	signal(SIGCHLD, sigchld_wait_handler);
-	sock = tcp_server(addr, TCP_XACT, SOCKOPT_REUSE);
+	sock = tcp_server(addr, backlog, TCP_XACT, SOCKOPT_REUSE);
 	for (;;) {
 		newsock = tcp_accept(sock, SOCKOPT_NONE);
 		switch (fork()) {
