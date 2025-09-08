@@ -23,9 +23,10 @@ typedef struct _state {
 	char	*server;
 	int	fd;
 	char	*buf;
+	int vsock_cid;
 } state_t;
 
-void	server_main(char* addr, int backlog);
+void	server_main(int vsock_cid, char* addr, int backlog);
 void	client_main(int parallel, state_t *state);
 void	source(int data);
 
@@ -43,15 +44,16 @@ main(int ac, char **av)
 	char serverhost[256];
 	int backlog = 100;
 	int	shutdown = 0;
+	int vsock_cid = 0;
 	state_t state;
-	char	*usage = "-s serverhost [-b <backlog>]\n OR [-m <message size>] [-M <bytes to move>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n OR -S serverhost\n";
+	char	*usage = "-s serverhost [-b <backlog>]\n OR [-m <message size>] [-M <bytes to move>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] [-v <vsock cid>] server\n OR [-v <vsock cid>] -S serverhost\n";
 	int	c;
 	
 	state.msize = 0;
 	state.move = 0;
 
 	/* Rest is client argument processing */
-	while (( c = getopt(ac, av, "s:b:S:m:M:P:W:N:")) != EOF) {
+	while (( c = getopt(ac, av, "s:b:v:S:m:M:P:W:N:")) != EOF) {
 		switch(c) {
 		case 's': /* Server */
 			if (strlen(optarg) > 256) {
@@ -65,15 +67,11 @@ main(int ac, char **av)
 		case 'b': /* Set backlog */
 			backlog = atoi(optarg);
 			fprintf(stderr, "backlog: %d\n", backlog);
-			if (backlog < 1) {
-				fprintf(stderr, "backlog cannot be %d and must greater than or equal to 1\n", backlog);
-				exit(1);
-			} 
 			break;
 		case 'S': /* shutdown serverhost */
 		{
 			int	conn;
-			conn = tcp_connect(optarg, TCP_DATA, SOCKOPT_NONE);
+			conn = tcp_connect(vsock_cid, optarg, TCP_DATA, SOCKOPT_NONE);
 			write(conn, "0", 1);
 			exit(0);
 		}
@@ -93,6 +91,9 @@ main(int ac, char **av)
 		case 'N':
 			repetitions = atoi(optarg);
 			break;
+		case 'v':
+			vsock_cid = atoi(optarg);
+			break;
 		default:
 			lmbench_usage(ac, av, usage);
 			break;
@@ -101,7 +102,7 @@ main(int ac, char **av)
 
 	if (server_mode) {
 		if (fork() == 0) {
-			server_main(serverhost, backlog);
+			server_main(vsock_cid, serverhost, backlog);
 		}
 		exit(0);
 	}
@@ -124,6 +125,8 @@ main(int ac, char **av)
 	if (state.move % state.msize) {
 		state.move += state.msize - state.move % state.msize;
 	}
+
+	state.vsock_cid = vsock_cid;
 
 	/*
 	 * Default is to warmup the connection for seven seconds, 
@@ -155,7 +158,7 @@ initialize(iter_t iterations, void *cookie)
 	}
 	touch(state->buf, state->msize);
 
-	state->sock = tcp_connect(state->server, TCP_DATA, SOCKOPT_READ|SOCKOPT_WRITE|SOCKOPT_REUSE);
+	state->sock = tcp_connect(state->vsock_cid, state->server, TCP_DATA, SOCKOPT_READ|SOCKOPT_WRITE|SOCKOPT_REUSE);
 	if (state->sock < 0) {
 		perror("socket connection");
 		exit(1);
@@ -196,13 +199,13 @@ cleanup(iter_t iterations, void* cookie)
 }
 
 void
-server_main(char* addr, int backlog)
+server_main(int vsock_cid, char* addr, int backlog)
 {
 	int	data, newdata;
 
 	GO_AWAY;
 
-	data = tcp_server(addr, backlog, TCP_DATA, SOCKOPT_WRITE|SOCKOPT_REUSE);
+	data = tcp_server(vsock_cid, addr, backlog, TCP_DATA, SOCKOPT_WRITE|SOCKOPT_REUSE);
 	if (data < 0) {
 		perror("server socket creation");
 		exit(1);

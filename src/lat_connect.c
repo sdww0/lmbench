@@ -25,11 +25,12 @@ char	*id = "$Id$\n";
 #include "bench.h"
 
 typedef struct _state {
+	int vsock_cid;
 	char	*server;
 } state_t;
 
 void	doclient(iter_t iterations, void * cookie);
-void	server_main(char* addr, int backlog);
+void	server_main(int vsock_cid, char* addr, int backlog);
 
 int
 main(int ac, char **av)
@@ -39,11 +40,12 @@ main(int ac, char **av)
 	int server_mode = 0;
 	char serverhost[256];
 	int backlog = 100;
+	int vsock_cid = 0;
 	int 	c;
 	char	buf[256];
-	char	*usage = "-s serverhost [-b <backlog>]\n OR [-S] [-N <repetitions>] server\n";
+	char	*usage = "-s serverhost [-v <vsock cid>] [-b <backlog>]\n OR [-S] [-N <repetitions>] [-v <vsock cid>] server\n";
 
-	while (( c = getopt(ac, av, "s:b:SP:W:N:")) != EOF) {
+	while (( c = getopt(ac, av, "s:b:SP:W:N:v:")) != EOF) {
 		switch(c) {
 		case 's': /* Server */
 			if (strlen(optarg) > 256) {
@@ -57,14 +59,10 @@ main(int ac, char **av)
 		case 'b': /* Set backlog */
 			backlog = atoi(optarg);
 			fprintf(stderr, "backlog: %d\n", backlog);
-			if (backlog < 1) {
-				fprintf(stderr, "backlog cannot be %d and must greater than or equal to 1\n", backlog);
-				exit(1);
-			} 
 			break;
 		case 'S': /* shutdown serverhost */
 		{
-			int sock = tcp_connect(av[optind],
+			int sock = tcp_connect(vsock_cid,av[optind],
 					       TCP_CONNECT,
 					       SOCKOPT_NONE);
 			write(sock, "0", 1);
@@ -74,6 +72,9 @@ main(int ac, char **av)
 		case 'N':
 			repetitions = atoi(optarg);
 			break;
+		case 'v':
+			vsock_cid = atoi(optarg);
+			break;
 		default:
 			lmbench_usage(ac, av, usage);
 			break;
@@ -82,7 +83,7 @@ main(int ac, char **av)
 
 	if (server_mode) {
 		if (fork() == 0) {
-			server_main(serverhost, backlog);
+			server_main(vsock_cid, serverhost, backlog);
 		}
 		exit(0);
 	}
@@ -92,6 +93,7 @@ main(int ac, char **av)
 	}
 
 	state.server = av[optind];
+	state.vsock_cid = vsock_cid;
 	benchmp(NULL, doclient, NULL, 0, 1, 0, repetitions, &state);
 
 	sprintf(buf, "TCP/IP connection cost to %s", state.server);
@@ -107,19 +109,19 @@ doclient(iter_t iterations, void *cookie)
 	register int 	sock;
 	
 	while (iterations-- > 0) {
-		sock = tcp_connect(server, TCP_CONNECT, SOCKOPT_REUSE);
+		sock = tcp_connect(state->vsock_cid, server, TCP_CONNECT, SOCKOPT_REUSE);
 		close(sock);
 	}
 }
 
 void
-server_main(char* addr, int backlog)
+server_main(int vsock_cid, char* addr, int backlog)
 {
 	int     newsock, sock;
 	char	c ='1';
 
 	GO_AWAY;
-	sock = tcp_server(addr, backlog, TCP_CONNECT, SOCKOPT_NONE|SOCKOPT_REUSE);
+	sock = tcp_server(vsock_cid, addr, backlog, TCP_CONNECT, SOCKOPT_NONE|SOCKOPT_REUSE);
 	for (;;) {
 		newsock = tcp_accept(sock, SOCKOPT_NONE);
 		if (read(newsock, &c, 1) > 0) {

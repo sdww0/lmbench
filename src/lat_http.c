@@ -24,7 +24,7 @@ http(char *server, char *file, int prog)
 	int     n;
 	int	b = 0;
 
-	sock = tcp_connect(server, prog, SOCKOPT_REUSE);
+	sock = tcp_connect(0, server, prog, SOCKOPT_REUSE);
 	sprintf(buf, "GET /%s HTTP/1.0\r\n\r\n\n", file);
 	if (debug) {
 		printf(buf);
@@ -48,7 +48,7 @@ killhttp(char *server, int prog)
 {
 	int     sock;
 
-	sock = tcp_connect(server, prog, SOCKOPT_REUSE);
+	sock = tcp_connect(0, server, prog, SOCKOPT_REUSE);
 	write(sock, "EXIT", 4);
 	close(sock);
 }

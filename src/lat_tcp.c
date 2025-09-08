@@ -12,43 +12,48 @@
  * (2) the version in the sccsid below is included in the report.
  * Support for this development by Sun Microsystems is gratefully acknowledged.
  */
-char	*id = "$Id$\n";
+char *id = "$Id$\n";
 
 #include "bench.h"
 
-typedef struct _state {
-	int	msize;
-	int	sock;
-	char	*server;
-	char	*buf;
+typedef struct _state
+{
+	int msize;
+	int sock;
+	unsigned int vsock_cid;
+	char *server;
+	char *buf;
 } state_t;
 
-void	init(iter_t iterations, void* cookie);
-void	cleanup(iter_t iterations, void* cookie);
-void	doclient(iter_t iterations, void* cookie);
-void	server_main(char* addr, int backlog);
-void	doserver(int sock);
+void init(iter_t iterations, void *cookie);
+void cleanup(iter_t iterations, void *cookie);
+void doclient(iter_t iterations, void *cookie);
+void server_main(int vsock_cid, char *addr, int backlog);
+void doserver(int sock);
 
-int
-main(int ac, char **av)
+int main(int ac, char **av)
 {
 	state_t state;
-	int	parallel = 1;
-	int	warmup = 0;
-	int	repetitions = TRIES;
+	int parallel = 1;
+	int warmup = 0;
+	int repetitions = TRIES;
 	int server_mode = 0;
 	char serverhost[256];
 	int backlog = 100;
-	int 	c;
-	char	buf[256];
-	char	*usage = "-s serverhost [-b <backlog>]\n OR [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] server\n OR -S server\n";
+	unsigned int vsock_cid = 0;
+	int c;
+	char buf[256];
+	char *usage = "-s serverhost [-b <backlog>] [-v <vsock cid>]\n OR [-m <message size>] [-P <parallelism>] [-W <warmup>] [-N <repetitions>] [-v <vsock cid>] server\n OR -S server\n";
 
 	state.msize = 1;
 
-	while (( c = getopt(ac, av, "s:b:S:m:P:W:N:")) != EOF) {
-		switch(c) {
+	while ((c = getopt(ac, av, "s:b:S:m:P:W:N:v:")) != EOF)
+	{
+		switch (c)
+		{
 		case 's': /* Server */
-			if (strlen(optarg) > 256) {
+			if (strlen(optarg) > 256)
+			{
 				fprintf(stderr, "serverhost %s cannot have length greater than 256\n", optarg);
 				exit(1);
 			}
@@ -59,15 +64,11 @@ main(int ac, char **av)
 		case 'b': /* Set backlog */
 			backlog = atoi(optarg);
 			fprintf(stderr, "backlog: %d\n", backlog);
-			if (backlog < 1) {
-				fprintf(stderr, "backlog cannot be %d and must greater than or equal to 1\n", backlog);
-				exit(1);
-			} 
 			break;
 		case 'S': /* shutdown serverhost */
-			state.sock = tcp_connect(optarg,
-						 TCP_XACT,
-						 SOCKOPT_NONE);
+			state.sock = tcp_connect(vsock_cid, optarg,
+									 TCP_XACT,
+									 SOCKOPT_NONE);
 			close(state.sock);
 			exit(0);
 		case 'm':
@@ -84,26 +85,33 @@ main(int ac, char **av)
 		case 'N':
 			repetitions = atoi(optarg);
 			break;
+		case 'v':
+			vsock_cid = atoi(optarg);
+			break;
 		default:
 			lmbench_usage(ac, av, usage);
 			break;
 		}
 	}
 
-	if (server_mode) {
-		if (fork() == 0) {
-			server_main(serverhost, backlog);
+	if (server_mode)
+	{
+		if (fork() == 0)
+		{
+			server_main(vsock_cid, serverhost, backlog);
 		}
 		exit(0);
 	}
 
-	if (optind != ac - 1) {
+	if (optind != ac - 1)
+	{
 		lmbench_usage(ac, av, usage);
 	}
 
 	state.server = av[optind];
-	benchmp(init, doclient, cleanup, MEDIUM, parallel, 
-		warmup, repetitions, &state);
+	state.vsock_cid = vsock_cid;
+	benchmp(init, doclient, cleanup, MEDIUM, parallel,
+			warmup, repetitions, &state);
 
 	sprintf(buf, "TCP latency using %s", state.server);
 	micro(buf, get_n());
@@ -111,17 +119,18 @@ main(int ac, char **av)
 	exit(0);
 }
 
-void
-init(iter_t iterations, void* cookie)
+void init(iter_t iterations, void *cookie)
 {
-	state_t *state = (state_t *) cookie;
-	int	msize  = htonl(state->msize);
+	state_t *state = (state_t *)cookie;
+	int msize = htonl(state->msize);
 
-	if (iterations) return;
+	if (iterations)
+		return;
 
-	state->sock = tcp_connect(state->server, TCP_XACT, SOCKOPT_NONE);
-	if (state -> sock < 0) {
-		fprintf(stderr, "fail to connect to server: %s\n", state -> server);
+	state->sock = tcp_connect(state->vsock_cid, state->server, TCP_XACT, SOCKOPT_NONE);
+	if (state->sock < 0)
+	{
+		fprintf(stderr, "fail to connect to server: %s\n", state->server);
 		exit(1);
 	}
 	state->buf = malloc(state->msize);
@@ -129,53 +138,56 @@ init(iter_t iterations, void* cookie)
 	write(state->sock, &msize, sizeof(int));
 }
 
-void
-cleanup(iter_t iterations, void* cookie)
+void cleanup(iter_t iterations, void *cookie)
 {
-	state_t *state = (state_t *) cookie;
+	state_t *state = (state_t *)cookie;
 
-	if (iterations) return;
+	if (iterations)
+		return;
 
 	close(state->sock);
 	free(state->buf);
 }
 
-void
-doclient(iter_t iterations, void* cookie)
+void doclient(iter_t iterations, void *cookie)
 {
-	state_t *state = (state_t *) cookie;
-	int 	sock   = state->sock;
+	state_t *state = (state_t *)cookie;
+	int sock = state->sock;
 
-	while (iterations-- > 0) {
-		if (write(sock, state->buf, state->msize) < 0) {
+	while (iterations-- > 0)
+	{
+		if (write(sock, state->buf, state->msize) < 0)
+		{
 			fprintf(stderr, "write %d bytes fails", state->msize);
 			exit(1);
 		}
-		if (read(sock, state->buf, state->msize) < 0) {
+		if (read(sock, state->buf, state->msize) < 0)
+		{
 			fprintf(stderr, "read %d bytes fails", state->msize);
 			exit(2);
 		}
 	}
 }
 
-void
-server_main(char* addr, int backlog)
+void server_main(int vsock_cid, char *addr, int backlog)
 {
-	int     newsock, sock;
+	int newsock, sock;
 
 	GO_AWAY;
 	signal(SIGCHLD, sigchld_wait_handler);
-	sock = tcp_server(addr, backlog, TCP_XACT, SOCKOPT_REUSE);
-	for (;;) {
+	sock = tcp_server(vsock_cid, addr, backlog, TCP_XACT, SOCKOPT_REUSE);
+	for (;;)
+	{
 		newsock = tcp_accept(sock, SOCKOPT_NONE);
-		switch (fork()) {
-		    case -1:
+		switch (fork())
+		{
+		case -1:
 			perror("fork");
 			break;
-		    case 0:
+		case 0:
 			doserver(newsock);
 			exit(0);
-		    default:
+		default:
 			close(newsock);
 			break;
 		}
@@ -183,20 +195,23 @@ server_main(char* addr, int backlog)
 	/* NOTREACHED */
 }
 
-void
-doserver(int sock)
+void doserver(int sock)
 {
-	int	n;
+	int n;
 
-	if (read(sock, &n, sizeof(int)) == sizeof(int)) {
-		int	msize = ntohl(n);
-		char*   buf = (char*)malloc(msize);
+	if (read(sock, &n, sizeof(int)) == sizeof(int))
+	{
+		int msize = ntohl(n);
+		char *buf = (char *)malloc(msize);
 
-		for (n = 0; read(sock, buf, msize) > 0; n++) {
+		for (n = 0; read(sock, buf, msize) > 0; n++)
+		{
 			write(sock, buf, msize);
 		}
 		free(buf);
-	} else {
+	}
+	else
+	{
 		/*
 		 * A connection with no data means shut down.
 		 */
